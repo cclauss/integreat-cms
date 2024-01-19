@@ -31,7 +31,9 @@ class Command(LogCommand):
         :param parser: The argument parser
         """
         parser.add_argument(
-            "page_id", type=int, help="The ID of a page belonging to the broken tree."
+            "--page_id",
+            type=int,
+            help="The ID of a page belonging to the broken tree (check all if omitted).",
         )
         parser.add_argument(
             "--commit",
@@ -50,17 +52,26 @@ class Command(LogCommand):
         :param \**options: The supplied keyword options
         :raises ~django.core.management.base.CommandError: When the input is invalid
         """
-        try:
-            root_node = Page.objects.get(id=page_id)
-        except Page.DoesNotExist as e:
-            raise CommandError(f'The page with id "{page_id}" does not exist.') from e
-        # Traversing to root node
-        while root_node.parent:
-            root_node = root_node.parent
-        action = "Fixing" if commit else "Detecting problems in"
-        self.print_info(f"{action} tree with id {root_node.tree_id}...")
-        self.calculate_left_right_values(root_node, 1, commit)
-        self.check_for_orphans(root_node.tree_id)
+        if page_id:
+            try:
+                root_node = Page.objects.get(id=page_id)
+            except Page.DoesNotExist as e:
+                raise CommandError(
+                    f'The page with id "{page_id}" does not exist.'
+                ) from e
+            # Traversing to root node
+            while root_node.parent:
+                root_node = root_node.parent
+            action = "Fixing" if commit else "Detecting problems in"
+            self.print_info(f"{action} tree with id {root_node.tree_id}...")
+            self.calculate_left_right_values(root_node, 1, commit)
+            self.check_for_orphans(root_node.tree_id)
+        else:
+            for root_node in Page.objects.filter(lft=1):
+                action = "Fixing" if commit else "Detecting problems in"
+                self.print_info(f"{action} tree with id {root_node.tree_id}...")
+                self.calculate_left_right_values(root_node, 1, commit)
+                self.check_for_orphans(root_node.tree_id)
 
     def check_tree_fields(self, tree_node: Page, left: int, right: int) -> bool:
         """
