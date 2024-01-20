@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from django.db import transaction
 from django.core.management.base import CommandError
 
 from ....cms.models import Page
@@ -41,6 +42,7 @@ class Command(LogCommand):
             help="Whether changes should be written to the database",
         )
 
+    @transaction.atomic
     # pylint: disable=arguments-differ
     def handle(self, *args: Any, page_id: int, commit: bool, **options: Any) -> None:
         r"""
@@ -55,4 +57,4 @@ class Command(LogCommand):
         printer = Printer(self.print_info, self.print_error, self.print_success)
         printer.bold = self.bold
         printer.write = self.stdout.write
-        return repair_tree(page_id, commit, printer)
+        return repair_tree(page_id, commit, printer=printer)

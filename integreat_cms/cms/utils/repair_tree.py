@@ -2,12 +2,12 @@
 This module contains utilities to repair or detect inconsistencies in a tree
 """
 from __future__ import annotations
-from db_mutex.db_mutex import db_mutex
 from django.db import transaction
 
 import logging
 
-from ...cms.models import Page
+from ..models import Page
+from ..utils.tree_mutex import tree_mutex
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ class Printer:
 
 
 @transaction.atomic
-@db_mutex('page')
+@tree_mutex('page')
 def repair_tree(page_id: int = 0, commit: bool = False, printer: Printer = Printer()) -> None:
     pages_seen: list[int] = []
     if page_id:
@@ -134,7 +134,7 @@ def check_tree_fields(tree_node: Page, left: int, right: int, printer: Printer =
         valid = False
     return valid
 
-def check_for_orphans(tree_id: int, pages_seen: list[int] = [], printer: Printer = Printer()) -> None:
+def check_for_orphans(tree_id: int, commit: bool = False, pages_seen: list[int] = [], printer: Printer = Printer()) -> None:
     """
     Check whether orphans exist (pages with the same tree_id, but its ancestors are in another tree)
 
@@ -159,6 +159,8 @@ def check_for_orphans(tree_id: int, pages_seen: list[int] = [], printer: Printer
                     f"\trgt: {orphan.rgt}"
                 )
             )
+            if commit:
+                repair_tree(orphan.pk, commit, printer=printer)
 
 def calculate_left_right_values(
     tree_node: Page, left: int, commit: bool, pages_seen: list[int] = [], printer: Printer = Printer()
