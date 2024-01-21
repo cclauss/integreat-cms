@@ -195,7 +195,7 @@ class MPTTFixer:
         extract root nodes and reset lft + rgt values
         """
         tree_counter = 1
-        for node in list(self.broken_nodes):
+        for node in self.broken_nodes:
             if not node.parent_id:
                 node.lft = 1
                 node.rgt = 2
@@ -204,21 +204,21 @@ class MPTTFixer:
                 node.tree_id = tree_counter
                 tree_counter = tree_counter + 1
                 self.fixed_nodes[node.pk] = node
-                self.broken_nodes.remove(node)
 
     def fix_child_nodes(self):
         """
         Get all remaining (child) nodes, add add them to the new/fixed tree
         """
-        for node in list(self.broken_nodes):
-            parent = self.fixed_nodes[node.parent_id]
-            node.fixed_children = []
-            node = self.calculate_lft_rgt(node, parent)
+        for node in self.broken_nodes:
+            if node.parent_id:
+                parent = self.fixed_nodes[node.parent_id]
+                node.fixed_children = []
+                node = self.calculate_lft_rgt(node, parent)
 
-            # append fixed node to tree and update ancestors lft/rgt
-            self.fixed_nodes[node.pk] = node
-            self.fixed_nodes[parent.pk].fixed_children.append(node.pk)
-            self.update_ancestors_rgt(node)
+                # append fixed node to tree and update ancestors lft/rgt
+                self.fixed_nodes[node.pk] = node
+                self.fixed_nodes[parent.pk].fixed_children.append(node.pk)
+                self.update_ancestors_rgt(node)
 
     def calculate_lft_rgt(self, node: Page, parent: Page):
         """
