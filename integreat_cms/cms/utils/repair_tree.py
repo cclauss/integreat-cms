@@ -70,7 +70,7 @@ class Printer:
 
 @transaction.atomic
 @tree_mutex
-def repair_tree(page_id: int = 0, commit: bool = False, printer: Printer = Printer(), fix_orphans: bool = True) -> None:
+def repair_tree(page_id: int = 0, commit: bool = False, printer: Printer = Printer()) -> None:
     pages_seen: list[int] = []
     orphans = set()
 
@@ -90,7 +90,7 @@ def repair_tree(page_id: int = 0, commit: bool = False, printer: Printer = Print
                 root_node = tree_node
             action = "Fixing" if commit else "Detecting problems in"
             printer.print(f"{action} tree with id {root_node.tree_id}...")
-            check_tree_fields(Page.objects.get(id=tree_node.pk), tree_node.lft, tree_node.rgt, printer)
+            print_changed_fields(Page.objects.get(id=tree_node.pk), tree_node.lft, tree_node.rgt, printer)
         check_for_orphans(root_node.tree_id, pages_seen, printer)
     else:
         for root_node in Page.objects.filter(lft=1):
@@ -102,7 +102,7 @@ def repair_tree(page_id: int = 0, commit: bool = False, printer: Printer = Print
             for page in mptt_fixer.get_fixed_tree_nodes():
                 page.save()
 
-def check_tree_fields(self, tree_node: Page, left: int, right: int, printer: Printer = Printer()) -> bool:
+def print_changed_fields(tree_node: Page, left: int, right: int, printer: Printer = Printer()) -> bool:
     """
     Check whether the tree fields are correct
 
@@ -111,7 +111,6 @@ def check_tree_fields(self, tree_node: Page, left: int, right: int, printer: Pri
     :param right: The new right value of the node
     :return: Whether the tree fields of the node are valid
     """
-    valid = True
     printer.write(printer.bold(f"Page {tree_node.id}:"))
     printer.success(f"\tparent_id: {tree_node.parent_id}")
     if not tree_node.parent or tree_node.tree_id == tree_node.parent.tree_id:
@@ -120,7 +119,6 @@ def check_tree_fields(self, tree_node: Page, left: int, right: int, printer: Pri
         printer.error(
             f"\ttree_id: {tree_node.tree_id} → {tree_node.parent.tree_id}"
         )
-        valid = False
     if tree_node.parent_id:
         if tree_node.depth == tree_node.parent.depth + 1:
             printer.success(f"\tdepth: {tree_node.depth}")
@@ -128,23 +126,18 @@ def check_tree_fields(self, tree_node: Page, left: int, right: int, printer: Pri
             printer.error(
                 f"\tdepth: {tree_node.depth} → {tree_node.parent.depth + 1}"
             )
-            valid = False
     elif tree_node.depth == 1:
         printer.success(f"\tdepth: {tree_node.depth}")
     else:
         printer.error(f"\tdepth: {tree_node.depth} → 1")
-        valid = False
     if tree_node.lft == left:
         printer.success(f"\tlft: {tree_node.lft}")
     else:
         printer.error(f"\tlft: {tree_node.lft} → {left}")
-        valid = False
     if tree_node.rgt == right:
         printer.success(f"\trgt: {tree_node.rgt}")
     else:
         printer.error(f"\trgt: {tree_node.rgt} → {right}")
-        valid = False
-    return valid
 
 def check_for_orphans(tree_id: int, pages_seen: list[int] = [], printer: Printer = Printer()) -> None:
     """
@@ -214,7 +207,6 @@ class MPTTFixer:
                 parent = self.fixed_nodes[node.parent_id]
                 node.fixed_children = []
                 node = self.calculate_lft_rgt(node, parent)
-
                 # append fixed node to tree and update ancestors lft/rgt
                 self.fixed_nodes[node.pk] = node
                 self.fixed_nodes[parent.pk].fixed_children.append(node.pk)
