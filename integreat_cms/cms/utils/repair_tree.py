@@ -99,8 +99,7 @@ def repair_tree(page_id: int = 0, commit: bool = False, printer: Printer = Print
             orphans.update(set(check_for_orphans(root_node.tree_id, pages_seen, printer)))
 
         if commit:
-            for page in mptt_fixer.fixed_nodes:
-                check_tree_fields(tree_node, left, right, printer)
+            for page in mptt_fixer.get_fixed_tree_nodes():
                 page.save()
 
 def check_tree_fields(self, tree_node: Page, left: int, right: int, printer: Printer = Printer()) -> bool:
@@ -205,14 +204,14 @@ class MPTTFixer:
                 node.tree_id = tree_counter
                 tree_counter = tree_counter + 1
                 self.fixed_nodes[node.pk] = node
-                self.existing_nodes.remove(node)
+                self.broken_nodes.remove(node)
 
     def get_all_nodes(self):
         """
         Get all remaining nodes, add add them to the new/fixed tree
         """
         for node in self.broken_nodes:
-            parent = self.fixed_nodes[node.parent]
+            parent = self.fixed_nodes[node.parent.pk]
             node.fixed_children = []
             self.fixed_nodes[parent.pk].fixed_children.append(node.pk)
             node = self.calculate_lft_rgt(node, parent)
@@ -233,10 +232,10 @@ class MPTTFixer:
             node.depth = parent.depth + 1
         else:
             # parent has fixed_children. Get right-most sibling and continue lft from there.
-            left_sibling_pk = next((pk for pk in self.fixed_nodes if pk == parent.fixed_children[-1]))
-            node.lft = self.fixed_nodes[left_sibling_pk].rgt + 1
+            left_sibling = self.fixed_nodes[parent.fixed_children[-1]]
+            node.lft = left_sibling.rgt + 1
             node.rgt = node.lft + 1
-            node.depth = self.fixed_nodes[left_sibling_pk].depth
+            node.depth = left_sibling.depth
         return node
 
     def update_ancestors_rgt(self, node: Page):
@@ -244,25 +243,25 @@ class MPTTFixer:
         As we only append siblings to the right, we only need to modify the rgt values
         of all ancestors to adopt the new node into the tree.
         """
-        parent = self.fixed_nodes[node.parent]
+        parent = self.fixed_nodes[node.parent.pk]
         self.fixed_nodes[parent.pk].rgt = node.rgt + 1
         node = self.fixed_nodes[parent.pk]
         while node.parent:
             self.fixed_nodes[parent.pk].rgt = node.rgt + 1
             node = parent
 
-    def get_fixed_page_nodes(self):
+    def get_fixed_tree_nodes(self):
         """
         Yield all page tree nodes
         """
-        yield self.fixed_nodes.items()
+        yield self.fixed_nodes.values()
 
     def get_fixed_tree_of_page(self, node_id: int):
         """
         get all nodes of page tree, either identfied by one page or the (new) tree ID.
         """
         tree_id = self.fixed_nodes[node_id].tree_id
-        for node in self.fixed_nodes.items():
+        for node in self.fixed_nodes.values():
             if node.tree_id == tree_id:
                 yield node
         yield
