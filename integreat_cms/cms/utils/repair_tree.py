@@ -12,8 +12,11 @@ from ..utils.tree_mutex import tree_mutex
 logger = logging.getLogger(__name__)
 
 class Printer:
-    def __init__(self, print=None, error=None, success=None):
-        self._print = print
+    """
+    Select printer for stdout or log file
+    """
+    def __init__(self, print_func=None, error=None, success=None):
+        self._print = print_func
         self._error = error
         self._success = success
         self._write = None
@@ -217,7 +220,7 @@ class MPTTFixer:
             self.fixed_nodes[node.pk] = node
             self.update_ancestors_rgt(node)
 
-    def calculate_lft_rgt(self, node, parent):
+    def calculate_lft_rgt(self, node: Page, parent: Page):
         """
         add a new node to the existing MPTT structure. As we sorted by lft, we always add
         to the right of existing nodes.
@@ -235,7 +238,7 @@ class MPTTFixer:
             node.depth = self.fixed_nodes[left_sibling_pk].depth
         return node
 
-    def update_ancestors_rgt(self, node):
+    def update_ancestors_rgt(self, node: Page):
         """
         As we only append siblings to the right, we only need to modify the rgt values
         of all ancestors to adopt the new node into the tree.
@@ -247,12 +250,18 @@ class MPTTFixer:
             self.fixed_nodes[parent.pk].rgt = node.rgt + 1
             node = parent
 
-    def get_fixed_tree_of_page(self, page_id):
+    def get_fixed_page_nodes(self):
+        """
+        Yield all page tree nodes
+        """
+        yield self.fixed_nodes.items()
+
+    def get_fixed_tree_of_page(self, node_id: int):
         """
         get all nodes of page tree, either identfied by one page or the (new) tree ID.
         """
-        tree_id = self.fixed_nodes[page_id].tree_id
-        for node_pk in self.fixed_nodes:
-            if self.fixed_nodes[node_pk].tree_id == tree_id:
-                yield self.fixed_nodes[node_pk]
+        tree_id = self.fixed_nodes[node_id].tree_id
+        for node in self.fixed_nodes.items():
+            if node.tree_id == tree_id:
+                yield node
         yield
