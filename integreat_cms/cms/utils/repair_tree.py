@@ -80,11 +80,14 @@ def repair_tree(page_id: int = 0, commit: bool = False, printer: Printer = Print
             raise ValueError(
                 f'The page with id "{page_id}" does not exist.'
             ) from e
-        tree_id = page.tree_id
-        for 
-        action = "Fixing" if commit else "Detecting problems in"
-        printer.print(f"{action} tree with id {root_node.tree_id}...")
-        check_tree_fields(root_node, mptt_fixer.fixed_nodes[root_node.pk], printer)
+        root_node = None
+        for tree_node in mptt_fixer.get_fixed_tree_of_page(page.pk):
+            # the first node is always the root node
+            if root_node is None:
+                root_node = tree_node
+            action = "Fixing" if commit else "Detecting problems in"
+            printer.print(f"{action} tree with id {root_node.tree_id}...")
+            check_tree_fields(Page.objects.get(id=tree_node.pk), tree_node.lft, tree_node.rgt, printer)
         check_for_orphans(root_node.tree_id, pages_seen, printer)
     else:
         for root_node in Page.objects.filter(lft=1):
@@ -97,7 +100,7 @@ def repair_tree(page_id: int = 0, commit: bool = False, printer: Printer = Print
                 check_tree_fields(tree_node, left, right, printer)
                 page.save()
 
-def check_tree_fields(tree_node: Page, fixed_page: Page, printer: Printer = Printer()) -> bool:
+def check_tree_fields(self, tree_node: Page, left: int, right: int, printer: Printer = Printer()) -> bool:
     """
     Check whether the tree fields are correct
 
@@ -180,6 +183,7 @@ class MPTTFixer:
         Creates a fixed tree when initializing class but does not save results
         """
         self.broken_nodes = list(Page.objects.all().order_by('tree_id', 'lft'))
+        # Dictionaries keep the insert order as of Python 3.7
         self.fixed_nodes = {}
         self.get_root_nodes()
         self.get_all_nodes()
@@ -225,10 +229,10 @@ class MPTTFixer:
             node.depth = parent.depth + 1
         else:
             # parent has children. Get right-most sibling and continue lft from there.
-            left_sibling = next((i for i in self.fixed_nodes if i.pk == parent.children[-1]))
-            node.lft = left_sibling.rgt + 1
+            left_sibling_pk = next((pk for pk in self.fixed_nodes if pk == parent.children[-1]))
+            node.lft = self.fixed_nodes[left_sibling_pk].rgt + 1
             node.rgt = node.lft + 1
-            node.depth = left_sibling.depth
+            node.depth = self.fixed_nodes[left_sibling_pk].depth
         return node
 
     def update_ancestors_rgt(self, node):
@@ -243,7 +247,12 @@ class MPTTFixer:
             self.fixed_nodes[parent.pk].rgt = node.rgt + 1
             node = parent
 
-    def get_pages_of_tree(self, page_id=None, tree_id=None):
+    def get_fixed_tree_of_page(self, page_id):
         """
-        get all nodes of page tree, either identfied by one page or the (new) tree ID
+        get all nodes of page tree, either identfied by one page or the (new) tree ID.
         """
+        tree_id = self.fixed_nodes[page_id].tree_id
+        for node_pk in self.fixed_nodes:
+            if self.fixed_nodes[node_pk].tree_id == tree_id:
+                yield self.fixed_nodes[node_pk]
+        yield
