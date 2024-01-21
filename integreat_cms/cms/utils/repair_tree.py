@@ -66,31 +66,38 @@ class Printer:
 
 
 @transaction.atomic
-@tree_mutex('page')
-def repair_tree(page_id: int = 0, commit: bool = False, printer: Printer = Printer()) -> None:
+@tree_mutex
+def repair_tree(page_id: int = 0, commit: bool = False, printer: Printer = Printer(), fix_orphans: bool = True) -> None:
     pages_seen: list[int] = []
+    orphans = set()
+
+    mptt_fixer = MPTTFixer()
+
     if page_id:
         try:
-            root_node = Page.objects.get(id=page_id)
+            page = Page.objects.get(id=page_id)
         except Page.DoesNotExist as e:
             raise ValueError(
                 f'The page with id "{page_id}" does not exist.'
             ) from e
-        # Traversing to root node
-        while root_node.parent:
-            root_node = root_node.parent
+        tree_id = page.tree_id
+        for 
         action = "Fixing" if commit else "Detecting problems in"
         printer.print(f"{action} tree with id {root_node.tree_id}...")
-        calculate_left_right_values(root_node, 1, commit, pages_seen, printer)
+        check_tree_fields(root_node, mptt_fixer.fixed_nodes[root_node.pk], printer)
         check_for_orphans(root_node.tree_id, pages_seen, printer)
     else:
         for root_node in Page.objects.filter(lft=1):
             action = "Fixing" if commit else "Detecting problems in"
             printer.print(f"{action} tree with id {root_node.tree_id}...")
-            calculate_left_right_values(root_node, 1, commit, pages_seen, printer)
-            check_for_orphans(root_node.tree_id, pages_seen, printer)
+            orphans.update(set(check_for_orphans(root_node.tree_id, pages_seen, printer)))
 
-def check_tree_fields(tree_node: Page, left: int, right: int, printer: Printer = Printer()) -> bool:
+        if commit:
+            for page in mptt_fixer.fixed_nodes:
+                check_tree_fields(tree_node, left, right, printer)
+                page.save()
+
+def check_tree_fields(tree_node: Page, fixed_page: Page, printer: Printer = Printer()) -> bool:
     """
     Check whether the tree fields are correct
 
@@ -134,7 +141,7 @@ def check_tree_fields(tree_node: Page, left: int, right: int, printer: Printer =
         valid = False
     return valid
 
-def check_for_orphans(tree_id: int, commit: bool = False, pages_seen: list[int] = [], printer: Printer = Printer()) -> None:
+def check_for_orphans(tree_id: int, pages_seen: list[int] = [], printer: Printer = Printer()) -> None:
     """
     Check whether orphans exist (pages with the same tree_id, but its ancestors are in another tree)
 
@@ -159,40 +166,84 @@ def check_for_orphans(tree_id: int, commit: bool = False, pages_seen: list[int] 
                     f"\trgt: {orphan.rgt}"
                 )
             )
-            if commit:
-                repair_tree(orphan.pk, commit, printer=printer)
+        return orphans
+    return []
 
-def calculate_left_right_values(
-    tree_node: Page, left: int, commit: bool, pages_seen: list[int] = [], printer: Printer = Printer()
-) -> int:
+class MPTTFixer:
     """
-    Recursively calculate the left and right value for a given node and its
-    children.
-
-    :param tree_node: A node of a MPTT tree
-    :param left: The new left value of the node
-    :param commit: Whether changes should be written to the database
-    :return: The new right value of the node
+    eats all nodes and coughs out fixed LFT, RGT and depth values. Uses the parent field
+    to fix hierarchy and sorts siblings by (potentially inconsistent) lft.
     """
-    right = left
 
-    for child in tree_node.children.all():
-        right = calculate_left_right_values(child, right + 1, commit, pages_seen, printer)
+    def __init__(self):
+        """
+        Creates a fixed tree when initializing class but does not save results
+        """
+        self.broken_nodes = list(Page.objects.all().order_by('tree_id', 'lft'))
+        self.fixed_nodes = {}
+        self.get_root_nodes()
+        self.get_all_nodes()
+        self.tree_counter = 0
 
-    right += 1
+    def get_root_nodes(self):
+        """
+        extract root nodes and reset lft + rgt values
+        """
+        tree_node_counter
+        for node in self.broken_nodes:
+            if node.parent is None:
+                node.lft = 1
+                node.rgt = 2
+                node.depth = 1
+                node.children = []
+                self.fixed_nodes[node.pk] = node
+                self.existing_nodes.remove(node)
 
-    valid = check_tree_fields(tree_node, left, right, printer)
+    def get_all_nodes(self):
+        """
+        Get all remaining nodes, add add them to the new/fixed tree
+        """
+        for node in self.broken_nodes:
+            parent = self.fixed_nodes[node.parent]
+            node.children = []
+            self.fixed_nodes[parent.pk].children.append(node.pk)
+            node = self.calculate_lft_rgt(node, parent)
 
-    if not valid and commit:
-        if tree_node.parent:
-            tree_node.tree_id = tree_node.parent.tree_id
-            tree_node.depth = tree_node.parent.depth + 1
-        tree_node.rgt = right
-        tree_node.lft = left
-        tree_node.save()
-        logger.info("Fixed tree fields of %r", tree_node)
+            # append fixed node to tree and update ancestors lft/rgt
+            self.fixed_nodes[node.pk] = node
+            self.update_ancestors_rgt(node)
 
-    pages_seen.append(tree_node.id)
+    def calculate_lft_rgt(self, node, parent):
+        """
+        add a new node to the existing MPTT structure. As we sorted by lft, we always add
+        to the right of existing nodes.
+        """
+        if not parent.children:
+            # first child node, use lft of parent to calculate node lft/rgt
+            node.lft = parent.lft + 1
+            node.rgt = node.lft + 1
+            node.depth = parent.depth + 1
+        else:
+            # parent has children. Get right-most sibling and continue lft from there.
+            left_sibling = next((i for i in self.fixed_nodes if i.pk == parent.children[-1]))
+            node.lft = left_sibling.rgt + 1
+            node.rgt = node.lft + 1
+            node.depth = left_sibling.depth
+        return node
 
-    return right
+    def update_ancestors_rgt(self, node):
+        """
+        As we only append siblings to the right, we only need to modify the rgt values
+        of all ancestors to adopt the new node into the tree.
+        """
+        parent = self.fixed_nodes[node.parent]
+        self.fixed_nodes[parent.pk].rgt = node.rgt + 1
+        node = self.fixed_nodes[parent.pk]
+        while node.parent:
+            self.fixed_nodes[parent.pk].rgt = node.rgt + 1
+            node = parent
 
+    def get_pages_of_tree(self, page_id=None, tree_id=None):
+        """
+        get all nodes of page tree, either identfied by one page or the (new) tree ID
+        """

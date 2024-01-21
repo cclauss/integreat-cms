@@ -240,7 +240,7 @@ class PageFormView(
 
     # pylint: disable=too-many-statements
     @transaction.atomic
-    @tree_mutex('page')
+    @tree_mutex
     def post(
         self, request: HttpRequest, *args: Any, **kwargs: Any
     ) -> HttpResponseRedirect:

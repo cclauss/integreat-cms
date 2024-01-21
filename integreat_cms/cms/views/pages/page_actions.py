@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 
 @require_POST
-@tree_mutex('page')
+@tree_mutex
 def archive_page(
     request: HttpRequest, page_id: int, region_slug: str, language_slug: str
 ) -> HttpResponseRedirect:
@@ -89,7 +89,7 @@ def archive_page(
 
 
 @require_POST
-@tree_mutex('page')
+@tree_mutex
 def restore_page(
     request: HttpRequest, page_id: int, region_slug: str, language_slug: str
 ) -> HttpResponseRedirect:
@@ -214,7 +214,7 @@ def get_page_content_ajax(
 @require_POST
 @permission_required("cms.delete_page")
 @transaction.atomic
-@tree_mutex('page')
+@tree_mutex
 def delete_page(
     request: HttpRequest, page_id: int, region_slug: str, language_slug: str
 ) -> HttpResponseRedirect:
@@ -413,7 +413,7 @@ def upload_xliff(
 @require_POST
 @permission_required("cms.change_page")
 @transaction.atomic
-@tree_mutex('page')
+@tree_mutex
 def move_page(
     request: HttpRequest,
     region_slug: str,
