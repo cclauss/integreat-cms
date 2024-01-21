@@ -10,11 +10,13 @@ import time
 import uuid
 from typing import TYPE_CHECKING
 
+from db_mutex import DBMutexError, DBMutexTimeoutError
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
+from django.db.utils import IntegrityError
 from django.http import (
     Http404,
     HttpResponse,
@@ -23,7 +25,6 @@ from django.http import (
     JsonResponse,
 )
 from django.shortcuts import get_object_or_404, redirect, render
-from django.db.utils import IntegrityError
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_POST
 from treebeard.exceptions import InvalidMoveToDescendant, InvalidPosition
@@ -34,8 +35,9 @@ from ...decorators import permission_required
 from ...forms import PageForm
 from ...models import Page, PageTranslation, Region
 from ...utils.file_utils import extract_zip_archive
-from ...utils.repair_tree import repair_tree, Printer
+from ...utils.repair_tree import Printer, repair_tree
 from ...utils.tree_mutex import tree_mutex
+
 if TYPE_CHECKING:
     from django.http import HttpRequest
 
@@ -213,7 +215,6 @@ def get_page_content_ajax(
 
 @require_POST
 @permission_required("cms.delete_page")
-@transaction.atomic
 @tree_mutex
 def delete_page(
     request: HttpRequest, page_id: int, region_slug: str, language_slug: str
@@ -412,7 +413,6 @@ def upload_xliff(
 
 @require_POST
 @permission_required("cms.change_page")
-@transaction.atomic
 @tree_mutex
 def move_page(
     request: HttpRequest,

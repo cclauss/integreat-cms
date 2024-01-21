@@ -2,9 +2,10 @@
 This module contains utilities to repair or detect inconsistencies in a tree
 """
 from __future__ import annotations
-from django.db import transaction
 
 import logging
+
+from django.db import transaction
 
 from ..models import Page
 from ..utils.tree_mutex import tree_mutex
@@ -68,7 +69,6 @@ class Printer:
         self._write = new
 
 
-@transaction.atomic
 @tree_mutex
 def repair_tree(page_id: int = 0, commit: bool = False, printer: Printer = Printer()) -> None:
     pages_seen: list[int] = []
