@@ -187,16 +187,16 @@ class MPTTFixer:
         self.broken_nodes = list(Page.objects.all().order_by('tree_id', 'lft'))
         # Dictionaries keep the insert order as of Python 3.7
         self.fixed_nodes = {}
-        self.get_root_nodes()
-        self.get_all_nodes()
+        self.fix_root_nodes()
+        self.fix_child_nodes()
 
-    def get_root_nodes(self):
+    def fix_root_nodes(self):
         """
         extract root nodes and reset lft + rgt values
         """
         tree_counter = 1
         for node in self.broken_nodes:
-            if node.parent is None:
+            if not node.parent is None:
                 node.lft = 1
                 node.rgt = 2
                 node.depth = 1
@@ -206,18 +206,18 @@ class MPTTFixer:
                 self.fixed_nodes[node.pk] = node
                 self.broken_nodes.remove(node)
 
-    def get_all_nodes(self):
+    def fix_child_nodes(self):
         """
-        Get all remaining nodes, add add them to the new/fixed tree
+        Get all remaining (child) nodes, add add them to the new/fixed tree
         """
         for node in self.broken_nodes:
             parent = self.fixed_nodes[node.parent.pk]
             node.fixed_children = []
-            self.fixed_nodes[parent.pk].fixed_children.append(node.pk)
             node = self.calculate_lft_rgt(node, parent)
 
             # append fixed node to tree and update ancestors lft/rgt
             self.fixed_nodes[node.pk] = node
+            self.fixed_nodes[parent.pk].fixed_children.append(node.pk)
             self.update_ancestors_rgt(node)
 
     def calculate_lft_rgt(self, node: Page, parent: Page):
@@ -248,7 +248,7 @@ class MPTTFixer:
         node = self.fixed_nodes[parent.pk]
         while node.parent:
             self.fixed_nodes[parent.pk].rgt = node.rgt + 1
-            node = parent
+            node = node.parent
 
     def get_fixed_tree_nodes(self):
         """
