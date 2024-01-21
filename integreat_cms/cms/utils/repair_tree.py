@@ -190,19 +190,20 @@ class MPTTFixer:
         self.fixed_nodes = {}
         self.get_root_nodes()
         self.get_all_nodes()
-        self.tree_counter = 0
 
     def get_root_nodes(self):
         """
         extract root nodes and reset lft + rgt values
         """
-        tree_node_counter
+        tree_counter = 1
         for node in self.broken_nodes:
             if node.parent is None:
                 node.lft = 1
                 node.rgt = 2
                 node.depth = 1
-                node.children = []
+                node.fixed_children = []
+                node.tree_id = tree_counter
+                tree_counter = tree_counter + 1
                 self.fixed_nodes[node.pk] = node
                 self.existing_nodes.remove(node)
 
@@ -212,8 +213,8 @@ class MPTTFixer:
         """
         for node in self.broken_nodes:
             parent = self.fixed_nodes[node.parent]
-            node.children = []
-            self.fixed_nodes[parent.pk].children.append(node.pk)
+            node.fixed_children = []
+            self.fixed_nodes[parent.pk].fixed_children.append(node.pk)
             node = self.calculate_lft_rgt(node, parent)
 
             # append fixed node to tree and update ancestors lft/rgt
@@ -225,14 +226,14 @@ class MPTTFixer:
         add a new node to the existing MPTT structure. As we sorted by lft, we always add
         to the right of existing nodes.
         """
-        if not parent.children:
+        if not parent.fixed_children:
             # first child node, use lft of parent to calculate node lft/rgt
             node.lft = parent.lft + 1
             node.rgt = node.lft + 1
             node.depth = parent.depth + 1
         else:
-            # parent has children. Get right-most sibling and continue lft from there.
-            left_sibling_pk = next((pk for pk in self.fixed_nodes if pk == parent.children[-1]))
+            # parent has fixed_children. Get right-most sibling and continue lft from there.
+            left_sibling_pk = next((pk for pk in self.fixed_nodes if pk == parent.fixed_children[-1]))
             node.lft = self.fixed_nodes[left_sibling_pk].rgt + 1
             node.rgt = node.lft + 1
             node.depth = self.fixed_nodes[left_sibling_pk].depth
