@@ -1048,14 +1048,25 @@ def test_deepl_bulk_mt_no_target_language(
         )
 
 
+error_message = [
+    (404, "The API URL is incorrect. Please contact an administrator."),
+    (413, "The content is too large."),
+    (429, "Too many request. Please try again later."),
+    (456, "The DeepL budget has been exceeded."),
+    (500, "An error has occurred. Please contact an administrator."),
+]
+
+
 @pytest.mark.django_db
 @pytest.mark.parametrize(
     "login_role_user", PRIV_STAFF_ROLES + [AUTHOR, MANAGEMENT, EDITOR], indirect=True
 )
-@pytest.mark.skip(reason="server error handling is currently not implemented")
+@pytest.mark.parametrize("error_message", error_message)
+# pylint: disable=too-many-locals, redefined-outer-name
 def test_deepl_bulk_mt_api_error(
     load_test_data: None,
     login_role_user: tuple[Client, str],
+    error_message: tuple[int, str],
     settings: SettingsWrapper,
     httpserver: HTTPServer,
     caplog: LogCaptureFixture,
@@ -1065,15 +1076,18 @@ def test_deepl_bulk_mt_api_error(
 
     :param load_test_data: The fixture providing the test data (see :meth:`~tests.conftest.load_test_data`)
     :param login_role_user: The fixture providing the http client and the current role (see :meth:`~tests.conftest.login_role_user`)
+    :param error_message: The combination of error status code and error message
     :param settings: The fixture providing the django settings
     :param httpserver: The fixture providing the dummy http server used for faking the DeepL API server
     :param caplog: The :fixture:`caplog` fixture
     """
+    error, message = error_message
+
     # Test for english messages
     settings.LANGUAGE_CODE = "en"
 
     # Setup a mocked DeepL API server with dummy response
-    httpserver.expect_request("/v2/translate").respond_with_data("Error", status=500)
+    httpserver.expect_request("/v2/translate").respond_with_data("Error", status=error)
 
     # Redirect call aimed at the DeepL API to the fake server
     settings.DEEPL_API_URL = f"http://localhost:{httpserver.port}"
@@ -1115,8 +1129,7 @@ def test_deepl_bulk_mt_api_error(
     for page_translation in page_translations:
         # Check for a failure message
         assert_message_in_log(
-            f'ERROR    Page "{page_translation[SOURCE_LANGUAGE_SLUG]}" could not be automatically translated into English. '
-            "Please try again later or contact an administrator",
+            f"ERROR    {message}",
             caplog,
         )
         # Check that the page was not machine translated

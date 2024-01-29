@@ -5,6 +5,7 @@ from html import unescape
 from typing import TYPE_CHECKING
 
 import deepl
+from deepl.exceptions import DeepLException
 from django.apps import apps
 from django.conf import settings
 from django.contrib import messages
@@ -99,6 +100,12 @@ class DeepLApiClient(MachineTranslationApiClient):
             failed_changes_generic_error = []
             successful_changes = []
 
+            incorrect_api = False
+            too_large_content = False
+            too_many_request = False
+            budget_exceeded = False
+            other_error = False
+
             for content_object in queryset:
                 source_translation = content_object.get_translation(
                     source_language.slug
@@ -147,13 +154,26 @@ class DeepLApiClient(MachineTranslationApiClient):
                     if hasattr(source_translation, attr) and getattr(
                         source_translation, attr
                     ):
-                        # data has to be unescaped for DeepL to recognize umlauts
-                        data[attr] = self.translator.translate_text(
-                            unescape(getattr(source_translation, attr)),
-                            source_lang=source_language.slug,
-                            target_lang=target_language_key,
-                            tag_handling="html",
-                        )
+                        try:
+                            # data has to be unescaped for DeepL to recognize Umlaute
+                            data[attr] = self.translator.translate_text(
+                                unescape(getattr(source_translation, attr)),
+                                source_lang=source_language.slug,
+                                target_lang=target_language_key,
+                                tag_handling="html",
+                            )
+                        except DeepLException as e:
+                            if e.http_status_code == 404:
+                                incorrect_api = True
+                            elif e.http_status_code == 413:
+                                too_large_content = True
+                            elif e.http_status_code == 429:
+                                too_many_request = True
+                            elif e.http_status_code == 456:
+                                budget_exceeded = True
+                            else:
+                                other_error = True
+                            break
 
                 content_translation_form = self.form_class(
                     data=data,
@@ -280,4 +300,34 @@ class DeepLApiClient(MachineTranslationApiClient):
                         model_name_plural=model_name_plural,
                         object_names=iter_to_string(failed_changes_generic_error),
                     ),
+                )
+
+            if incorrect_api:
+                messages.error(
+                    self.request,
+                    _("The API URL is incorrect. Please contact an administrator."),
+                )
+
+            if too_large_content:
+                messages.error(
+                    self.request,
+                    _("The content is too large."),
+                )
+
+            if too_many_request:
+                messages.error(
+                    self.request,
+                    _("Too many request. Please try again later."),
+                )
+
+            if budget_exceeded:
+                messages.error(
+                    self.request,
+                    _("The DeepL budget has been exceeded."),
+                )
+
+            if other_error:
+                messages.error(
+                    self.request,
+                    _("An error has occurred. Please contact an administrator."),
                 )

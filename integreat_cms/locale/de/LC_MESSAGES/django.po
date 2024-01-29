@@ -8812,7 +8812,7 @@ msgstr "Erfolg: \"{}\" kann diese Seite nun bearbeiten"
 msgid "Success: The user \"{}\" can now publish this page."
 msgstr "Erfolg: \"{}\" kann dieses Seite nun veröffentlichen"
 
-#: cms/views/pages/page_actions.py
+#: cms/views/pages/page_actions.py deepl_api/deepl_api_client.py
 msgid "An error has occurred. Please contact an administrator."
 msgstr ""
 "Ein Fehler ist aufgetreten. Bitte kontaktieren Sie eine:n Administrator:in."
@@ -9609,6 +9609,22 @@ msgstr[1] ""
 "Die folgenden {model_name_plural} konnten nicht automatisch übersetzt "
 "werden: {object_names}"
 
+#: deepl_api/deepl_api_client.py
+msgid "The API URL is incorrect. Please contact an administrator."
+msgstr "Die API-URL ist inkorrekt. Bitte kontaktieren Sie einen Administrator."
+
+#: deepl_api/deepl_api_client.py
+msgid "The content is too large."
+msgstr "Der Inhalt ist zu groß."
+
+#: deepl_api/deepl_api_client.py
+msgid "Too many request. Please try again later."
+msgstr "Zu viele Anfragen. Bitte versuchen Sie es später erneut."
+
+#: deepl_api/deepl_api_client.py
+msgid "The DeepL budget has been exceeded."
+msgstr "Das DeepL-Budget wurde überschritten."
+
 #: firebase_api/apps.py
 msgid "Firebase API"
 msgstr "Firebase API"
@@ -9813,6 +9829,7 @@ msgstr ""
 
 #~ msgid "Allow machine translations into the following languages:"
 #~ msgstr "Folgende Sprachen maschinell übersetzen:"
+
 #~ msgid "No source translation could be found for {} \"{}\"."
 #~ msgstr "Es konnte kein Quelltext für {} \"{}\" gefunden werden."
 
