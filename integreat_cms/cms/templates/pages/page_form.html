@@ -47,15 +47,19 @@
             {% if not page_form.instance.id or not page_form.instance.archived %}
                 <div class="flex flex-wrap grow justify-end gap-2 items-center">
                     {% include "generic_auto_save_note.html" with form_instance=page_translation_form.instance %}
-                    <button name="preview_page" type="button" data-preview-page data-edit-page-mode data-right-to-left={{ right_to_left }} class="btn btn-ghost">
+                    <button name="preview_page" type="button" data-preview-page data-edit-page-mode data-right-to-left={{ right_to_left }} class="btn btn-ghost no-premature-submission">
                         {% translate "Preview" %}
                     </button>
                     {% has_perm 'cms.publish_page_object' request.user page as can_publish_page %}
                     {% if can_publish_page %}
-                        <button name="status" value="{{ DRAFT }}" class="btn btn-outline">
+                        <button name="status"
+                                value="{{ DRAFT }}"
+                                class="btn btn-outline no-premature-submission">
                             {% translate "Save as draft" %}
                         </button>
-                        <button name="status" value="{{ PUBLIC }}" class="btn whitespace-nowrap">
+                        <button name="status"
+                                value="{{ PUBLIC }}"
+                                class="btn whitespace-nowrap no-premature-submission">
                             {% if page_translation_form.instance.status == PUBLIC %}
                                 {% translate "Update" %}
                             {% else %}
@@ -63,7 +67,9 @@
                             {% endif %}
                         </button>
                     {% elif can_edit_page %}
-                        <button name="status" value="{{ REVIEW }}" class="btn">
+                        <button name="status"
+                                value="{{ REVIEW }}"
+                                class="btn no-premature-submission">
                             {% translate "Submit for approval" %}
                         </button>
                     {% endif %}
