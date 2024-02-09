@@ -15,6 +15,7 @@ from linkcheck.listeners import tasks_queue
 from linkcheck.models import Link, Url
 from lxml.html import rewrite_links
 
+from ..models.abstract_content_translation import AbstractContentTranslation
 from integreat_cms.cms.models import (
     EventTranslation,
     ImprintPageTranslation,
@@ -194,7 +195,9 @@ def replace_link_helper(old_url: str, new_url: str, link: str) -> str:
 
 
 def save_new_version(
-    translation: PageTranslation, new_translation: PageTranslation, user: Any | None
+    translation: AbstractContentTranslation,
+    new_translation: AbstractContentTranslation,
+    user: Any | None,
 ) -> None:
     """
     Save a new translation version

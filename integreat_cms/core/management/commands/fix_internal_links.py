@@ -1,16 +1,21 @@
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
+from functools import partial
 from typing import TYPE_CHECKING
 from urllib.parse import unquote
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import CommandError
-from linkcheck.models import Url
+from django.db.models import Q
+from linkcheck.models import Link, Url
+from lxml.html import rewrite_links
 
 from ....cms.models import Region
+from ....cms.models.abstract_content_translation import AbstractContentTranslation
 from ....cms.utils import internal_link_utils
-from ....cms.utils.linkcheck_utils import replace_links
+from ....cms.utils.linkcheck_utils import replace_link_helper, save_new_version
 from ..log_command import LogCommand
 
 if TYPE_CHECKING:
@@ -97,7 +102,23 @@ class Command(LogCommand):
         region = get_region(region_slug) if region_slug else None
         user = get_user(username) if username else None
 
-        for url in Url.objects.all():
+        from time import perf_counter
+
+        from django.db import connection
+
+        start = perf_counter()
+
+        query = Url.objects.all()
+        if region:
+            region_links = Link.objects.filter(
+                Q(page_translation__page__region__slug=region_slug)
+                | Q(imprint_translation__page__region__slug=region_slug)
+                | Q(event_translation__event__region__slug=region_slug)
+                | Q(poi_translation__poi__region__slug=region_slug)
+            )
+            query = Url.objects.filter(links__in=region_links).distinct()
+
+        for url in query:
             if not url.internal:
                 continue
             source_translation = internal_link_utils.get_public_translation_for_link(
@@ -108,23 +129,50 @@ class Command(LogCommand):
 
             for link in url.links.all():
                 target_language_slug = link.content_object.language.slug
-                if target_translation := source_translation.foreign_object.get_public_translation(
-                    target_language_slug
-                ):
-                    target_url = target_translation.full_url
-                    source_url = unquote(url.url)
-                    if target_url.strip("/") != source_url.strip("/"):
-                        replace_links(
-                            source_url,
-                            target_url,
-                            region=region,
-                            partial_match=False,
-                            language=target_translation.language,
-                            user=user,
-                            commit=commit,
+                target_translation = source_translation
+                if target_language_slug != source_translation.language.slug:
+                    target_translation = (
+                        source_translation.foreign_object.get_public_translation(
+                            target_language_slug
                         )
+                    )
+
+                target_url = target_translation.full_url
+                source_url = unquote(url.url)
+                if target_url.strip("/") != source_url.strip("/"):
+                    replace_single_link(
+                        link.content_object, source_url, target_url, user, commit
+                    )
+
+        print(len(connection.queries))
+        print(f"Took {perf_counter() - start} seconds to run")
 
         if commit:
             logger.success("✔ Successfully finished fixing broken internal links.")  # type: ignore[attr-defined]
         else:
             logger.info("✔ Finished dry-run of fixing broken internal links.")
+
+
+def replace_single_link(
+    translation: AbstractContentTranslation,
+    old_url: str,
+    new_url: str,
+    user: Any | None,
+    commit: bool,
+) -> None:
+    """
+    Replaces a link on a single translation
+
+    :param translation: The translation to modify
+    :param old_url: The old url
+    :param new_url: The new url, by which the old url will be replaced
+    :param user: The user that should be credited for this action
+    :param commit: Whether to write to the database
+    """
+    new_translation = deepcopy(translation)
+    new_translation.content = rewrite_links(
+        new_translation.content, partial(replace_link_helper, old_url, new_url)
+    )
+    logger.debug("Replacing %r with %r in %r", old_url, new_url, new_translation)
+    if commit:
+        save_new_version(translation, new_translation, user)
