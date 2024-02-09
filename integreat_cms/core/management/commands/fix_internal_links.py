@@ -8,14 +8,17 @@ from urllib.parse import unquote
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import CommandError
-from django.db.models import Q
-from linkcheck.models import Link, Url
+from linkcheck.models import Url
 from lxml.html import rewrite_links
 
 from ....cms.models import Region
 from ....cms.models.abstract_content_translation import AbstractContentTranslation
 from ....cms.utils import internal_link_utils
-from ....cms.utils.linkcheck_utils import replace_link_helper, save_new_version
+from ....cms.utils.linkcheck_utils import (
+    get_region_links,
+    replace_link_helper,
+    save_new_version,
+)
 from ..log_command import LogCommand
 
 if TYPE_CHECKING:
@@ -104,12 +107,7 @@ class Command(LogCommand):
 
         query = Url.objects.all()
         if region:
-            region_links = Link.objects.filter(
-                Q(page_translation__page__region__slug=region_slug)
-                | Q(imprint_translation__page__region__slug=region_slug)
-                | Q(event_translation__event__region__slug=region_slug)
-                | Q(poi_translation__poi__region__slug=region_slug)
-            )
+            region_links = get_region_links(region)
             query = Url.objects.filter(links__in=region_links).distinct()
 
         for url in query:
@@ -121,7 +119,7 @@ class Command(LogCommand):
             if not source_translation:
                 continue
 
-            for link in url.links.all():
+            for link in url.links.all().prefetch_related("content_object__language"):
                 target_language_slug = link.content_object.language.slug
                 target_translation = source_translation
                 if target_language_slug != source_translation.language.slug:

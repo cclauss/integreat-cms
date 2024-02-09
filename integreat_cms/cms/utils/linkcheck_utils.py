@@ -10,12 +10,12 @@ from urllib.parse import ParseResult, unquote, urlparse
 
 from django.conf import settings
 from django.db.models import Prefetch, Q, Subquery
+from django.db.models.sql import Query
 from linkcheck import update_lock
 from linkcheck.listeners import tasks_queue
 from linkcheck.models import Link, Url
 from lxml.html import rewrite_links
 
-from ..models.abstract_content_translation import AbstractContentTranslation
 from integreat_cms.cms.models import (
     EventTranslation,
     ImprintPageTranslation,
@@ -23,6 +23,8 @@ from integreat_cms.cms.models import (
     POITranslation,
     Region,
 )
+
+from ..models.abstract_content_translation import AbstractContentTranslation
 
 if TYPE_CHECKING:
     from typing import Any
@@ -51,35 +53,7 @@ def get_urls(
         urls = urls.filter(id__in=url_ids)
     if region_slug:
         region = Region.objects.get(slug=region_slug)
-        latest_pagetranslation_versions = Subquery(
-            PageTranslation.objects.filter(
-                page__id__in=Subquery(region.non_archived_pages.values("pk")),
-            )
-            .distinct("page__id", "language__id")
-            .values_list("pk", flat=True)
-        )
-        latest_poitranslation_versions = Subquery(
-            POITranslation.objects.filter(poi__region=region)
-            .distinct("poi__id", "language__id")
-            .values_list("pk", flat=True)
-        )
-        latest_eventtranslation_versions = Subquery(
-            EventTranslation.objects.filter(event__region=region)
-            .distinct("event__id", "language__id")
-            .values_list("pk", flat=True)
-        )
-        latest_imprinttranslation_versions = Subquery(
-            ImprintPageTranslation.objects.filter(page__region=region)
-            .distinct("page__id", "language__id")
-            .values_list("pk", flat=True)
-        )
-        # Get all link objects of the requested region
-        region_links = Link.objects.filter(
-            Q(page_translation__id__in=latest_pagetranslation_versions)
-            | Q(imprint_translation__id__in=latest_imprinttranslation_versions)
-            | Q(event_translation__id__in=latest_eventtranslation_versions)
-            | Q(poi_translation__id__in=latest_poitranslation_versions)
-        ).order_by("id")
+        region_links = get_region_links(region)
 
         if prefetch_content_objects:
             region_links = region_links.prefetch_related("content_object__language")
@@ -99,6 +73,45 @@ def get_urls(
         # If the region slug is given, only return urls that occur at least once in the requested region
         urls = [url for url in urls if url.region_links]
     return urls
+
+
+def get_region_links(region: Region) -> Query:
+    """
+    Returns the links of translations of the given region
+    :param region: The region
+    :return: A query containing the relevant links
+    """
+    latest_pagetranslation_versions = Subquery(
+        PageTranslation.objects.filter(
+            page__id__in=Subquery(region.non_archived_pages.values("pk")),
+        )
+        .distinct("page__id", "language__id")
+        .values_list("pk", flat=True)
+    )
+    latest_poitranslation_versions = Subquery(
+        POITranslation.objects.filter(poi__region=region)
+        .distinct("poi__id", "language__id")
+        .values_list("pk", flat=True)
+    )
+    latest_eventtranslation_versions = Subquery(
+        EventTranslation.objects.filter(event__region=region)
+        .distinct("event__id", "language__id")
+        .values_list("pk", flat=True)
+    )
+    latest_imprinttranslation_versions = Subquery(
+        ImprintPageTranslation.objects.filter(page__region=region)
+        .distinct("page__id", "language__id")
+        .values_list("pk", flat=True)
+    )
+    # Get all link objects of the requested region
+    region_links = Link.objects.filter(
+        Q(page_translation__id__in=latest_pagetranslation_versions)
+        | Q(imprint_translation__id__in=latest_imprinttranslation_versions)
+        | Q(event_translation__id__in=latest_eventtranslation_versions)
+        | Q(poi_translation__id__in=latest_poitranslation_versions)
+    ).order_by("id")
+
+    return region_links
 
 
 def get_url_count(region_slug: str | None = None) -> dict[str, int]:
