@@ -102,12 +102,6 @@ class Command(LogCommand):
         region = get_region(region_slug) if region_slug else None
         user = get_user(username) if username else None
 
-        from time import perf_counter
-
-        from django.db import connection
-
-        start = perf_counter()
-
         query = Url.objects.all()
         if region:
             region_links = Link.objects.filter(
@@ -143,9 +137,6 @@ class Command(LogCommand):
                     replace_single_link(
                         link.content_object, source_url, target_url, user, commit
                     )
-
-        print(len(connection.queries))
-        print(f"Took {perf_counter() - start} seconds to run")
 
         if commit:
             logger.success("✔ Successfully finished fixing broken internal links.")  # type: ignore[attr-defined]
