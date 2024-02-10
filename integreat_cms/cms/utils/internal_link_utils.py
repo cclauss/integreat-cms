@@ -124,7 +124,7 @@ def get_public_translation_for_webapp_link(
         "status": status.PUBLIC,
     }
     if object_type != ImprintPageTranslation:
-        filter_args["slug"] = object_slug
+        filter_args[f"{foreign_object}__translations__slug"] = object_slug
 
     instances = (
         object_type.objects.filter(**filter_args)
