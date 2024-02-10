@@ -162,7 +162,7 @@ def replace_links_of_translation(
     commit: bool,
 ) -> None:
     """
-    Replaces a link on a single translation
+    Replaces links on a single translation
 
     :param translation: The translation to modify
     :param rules: The rules how to replace the links. The keys are the old urls and the values are the new urls
