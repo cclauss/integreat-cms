@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections import defaultdict
 from copy import deepcopy
 from functools import partial
@@ -9,6 +10,7 @@ from urllib.parse import unquote
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import CommandError
+from linkcheck.listeners import tasks_queue
 from linkcheck.models import Url
 from lxml.html import rewrite_links
 
@@ -133,11 +135,19 @@ class Command(LogCommand):
                 target_url = target_translation.full_url
                 source_url = unquote(url.url)
                 if target_url.strip("/") != source_url.strip("/"):
+                    logger.debug(
+                        "%r: %r -> %r", link.content_object, source_url, target_url
+                    )
                     translation_updates[link.content_object][source_url] = target_url
 
         # Now perform all updates
         for translation, url_updates in translation_updates.items():
             replace_links_of_translation(translation, url_updates, user, commit)
+
+        # Wait until all post-save signals have been processed
+        logger.debug("Waiting for linkcheck listeners to update link database...")
+        time.sleep(0.1)
+        tasks_queue.join()
 
         if commit:
             logger.success("✔ Successfully finished fixing broken internal links.")  # type: ignore[attr-defined]
