@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from copy import deepcopy
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import DefaultDict, TYPE_CHECKING
 from urllib.parse import unquote
 
 from django.contrib.auth import get_user_model
@@ -14,11 +15,7 @@ from lxml.html import rewrite_links
 from ....cms.models import Region
 from ....cms.models.abstract_content_translation import AbstractContentTranslation
 from ....cms.utils import internal_link_utils
-from ....cms.utils.linkcheck_utils import (
-    get_region_links,
-    replace_link_helper,
-    save_new_version,
-)
+from ....cms.utils.linkcheck_utils import get_region_links, save_new_version
 from ..log_command import LogCommand
 
 if TYPE_CHECKING:
@@ -86,7 +83,7 @@ class Command(LogCommand):
             help="Whether changes should be written to the database",
         )
 
-    # pylint: disable=arguments-differ
+    # pylint: disable=arguments-differ, too-many-locals
     def handle(
         self, *args: Any, region_slug: str, username: str, commit: bool, **options: Any
     ) -> None:
@@ -104,6 +101,10 @@ class Command(LogCommand):
 
         region = get_region(region_slug) if region_slug else None
         user = get_user(username) if username else None
+
+        translation_updates: DefaultDict[AbstractContentTranslation, dict[str, str]] = (
+            defaultdict(dict)
+        )
 
         query = Url.objects.all()
         if region:
@@ -132,9 +133,11 @@ class Command(LogCommand):
                 target_url = target_translation.full_url
                 source_url = unquote(url.url)
                 if target_url.strip("/") != source_url.strip("/"):
-                    replace_single_link(
-                        link.content_object, source_url, target_url, user, commit
-                    )
+                    translation_updates[link.content_object][source_url] = target_url
+
+        # Now perform all updates
+        for translation, url_updates in translation_updates.items():
+            replace_links_of_translation(translation, url_updates, user, commit)
 
         if commit:
             logger.success("✔ Successfully finished fixing broken internal links.")  # type: ignore[attr-defined]
@@ -142,10 +145,9 @@ class Command(LogCommand):
             logger.info("✔ Finished dry-run of fixing broken internal links.")
 
 
-def replace_single_link(
+def replace_links_of_translation(
     translation: AbstractContentTranslation,
-    old_url: str,
-    new_url: str,
+    rules: dict[str, str],
     user: Any | None,
     commit: bool,
 ) -> None:
@@ -153,15 +155,26 @@ def replace_single_link(
     Replaces a link on a single translation
 
     :param translation: The translation to modify
-    :param old_url: The old url
-    :param new_url: The new url, by which the old url will be replaced
+    :param rules: The rules how to replace the links. The keys are the old urls and the values are the new urls
     :param user: The user that should be credited for this action
     :param commit: Whether to write to the database
     """
     new_translation = deepcopy(translation)
     new_translation.content = rewrite_links(
-        new_translation.content, partial(replace_link_helper, old_url, new_url)
+        new_translation.content, partial(replace_link_helper, rules)
     )
-    logger.debug("Replacing %r with %r in %r", old_url, new_url, new_translation)
+    logger.debug(
+        "Replacing %r link(s) in %r: %r", len(rules), new_translation, rules.keys()
+    )
     if commit:
         save_new_version(translation, new_translation, user)
+
+
+def replace_link_helper(rules: dict[str, str], link: str) -> str:
+    """
+    Helper function to update a link according to the given rules
+    :param rules: A dict where the keys are the old urls and the values are the new urls
+    :param link: The link to replace according to the rules
+    :return: Returns the updated link if a matching rules is found, otherwise returns it unmodified
+    """
+    return rules.get(link, link)
