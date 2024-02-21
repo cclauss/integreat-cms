@@ -17,7 +17,11 @@ from lxml.html import rewrite_links
 from ....cms.models import Region
 from ....cms.models.abstract_content_translation import AbstractContentTranslation
 from ....cms.utils import internal_link_utils
-from ....cms.utils.linkcheck_utils import get_region_links, save_new_version
+from ....cms.utils.linkcheck_utils import (
+    fix_content_link_encoding,
+    get_region_links,
+    save_new_version,
+)
 from ..log_command import LogCommand
 
 if TYPE_CHECKING:
@@ -170,8 +174,8 @@ def replace_links_of_translation(
     :param commit: Whether to write to the database
     """
     new_translation = deepcopy(translation)
-    new_translation.content = rewrite_links(
-        new_translation.content, partial(replace_link_helper, rules)
+    new_translation.content = fix_content_link_encoding(
+        rewrite_links(new_translation.content, partial(replace_link_helper, rules))
     )
     logger.debug(
         "Replacing %r link(s) in %r: %r", len(rules), new_translation, rules.keys()
