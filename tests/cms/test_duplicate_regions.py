@@ -53,6 +53,8 @@ def test_duplicate_regions(
             "longitude": 1,
             "latitude": 1,
             "duplicated_region": 1,
+            "duplication_pbo_behavior": "activate_missing",
+            "zammad_url": "https://zammad-test.example.com",
             "timezone": "Europe/Berlin",
             "deepl_renewal_month": 6,
         },

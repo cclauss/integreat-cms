@@ -33,6 +33,8 @@ from ..icon_widget import IconWidget
 if TYPE_CHECKING:
     from typing import Any
 
+    from django.db.models.query import QuerySet
+
 logger = logging.getLogger(__name__)
 
 
@@ -109,6 +111,26 @@ class RegionForm(CustomModelForm):
         label=_("Keep publication status of pages"),
         help_text=_(
             "Enable it to keep the initial publication status of the pages and don't overwrite them to draft."
+        ),
+    )
+
+    duplication_pbo_behavior = forms.ChoiceField(
+        choices=(
+            (
+                "activate_missing",
+                _("Activate all required offers, regardless of choices above"),
+            ),
+            (
+                "discard_missing",
+                _("Discard offer embeddings from offers not activated manually"),
+            ),
+        ),
+        initial="activate_missing",
+        widget=forms.Select,
+        required=False,
+        label=_("Page based offers cloning behavior"),
+        help_text=_(
+            "Decide whether offers which have not been activated but are required for embedded content should be auto-activated, or their embeddings be ignored during cloning."
         ),
     )
 
@@ -253,6 +275,22 @@ class RegionForm(CustomModelForm):
         if duplicate_region:
             source_region = self.cleaned_data["duplicated_region"]
             keep_status = self.cleaned_data["duplication_keep_status"]
+
+            # Determine offers to force activate or to skip when cloning pages
+            required_offers = OfferTemplate.objects.filter(pages__region=source_region)
+            if self.cleaned_data["duplication_pbo_behavior"] == "activate_missing":
+                region.offers.set(region.offers.union(required_offers))
+                # Even is "activate_missing" was selected, Zammad forms need to be skipped during cloning if no Zammad URL is set
+                offers_to_discard = (
+                    None
+                    if region.zammad_url
+                    else OfferTemplate.objects.filter(is_zammad_form=True)
+                )
+            else:
+                offers_to_discard = required_offers.exclude(
+                    id__in=region.offers.values_list("id", flat=True)
+                )
+
             # Duplicate language tree
             logger.info("Duplicating language tree of %r to %r", source_region, region)
             duplicate_language_tree(source_region, region)
@@ -260,7 +298,12 @@ class RegionForm(CustomModelForm):
             with disable_listeners():
                 # Duplicate pages
                 logger.info("Duplicating page tree of %r to %r", source_region, region)
-                duplicate_pages(source_region, region, keep_status=keep_status)
+                duplicate_pages(
+                    source_region,
+                    region,
+                    keep_status=keep_status,
+                    offers_to_discard=offers_to_discard,
+                )
                 # Duplicate Imprint
                 if source_region.imprint:
                     logger.info(
@@ -373,6 +416,18 @@ class RegionForm(CustomModelForm):
                     _(
                         "Could not retrieve the coordinates automatically, please fill the field manually."
                     ),
+                    code="required",
+                ),
+            )
+
+        # If a region is being cloned but no PBO cloning behavior has been selected, throw an error
+        if cleaned_data.get("duplicated_region") and not cleaned_data.get(
+            "duplication_pbo_behavior"
+        ):
+            self.add_error(
+                "duplication_pbo_behavior",
+                forms.ValidationError(
+                    _("Please choose a behavior for cloning embedded offers."),
                     code="required",
                 ),
             )
@@ -636,6 +691,7 @@ def duplicate_language_tree(
             )
 
 
+# pylint: disable=too-many-locals
 def duplicate_pages(
     source_region: Region,
     target_region: Region,
@@ -643,6 +699,7 @@ def duplicate_pages(
     target_parent: Page | None = None,
     logging_prefix: str = "",
     keep_status: bool = False,
+    offers_to_discard: QuerySet[OfferTemplate] | None = None,
 ) -> None:
     """
     Function to duplicate all non-archived pages from one region to another
@@ -658,6 +715,7 @@ def duplicate_pages(
     :param target_parent: The page of the target region which is the duplicate of the source parent page
     :param logging_prefix: Recursion level to get a pretty log output
     :param keep_status: Parameter to indicate whether the status of the cloned pages should be kept
+    :param offers_to_discard: Offers which might be embedded in the source region, but not in the target region
     """
 
     logger.debug(
@@ -710,7 +768,14 @@ def duplicate_pages(
         # Save duplicated page
         target_page.save()
         # Set embedded offers ManyToMany field
-        target_page.embedded_offers.add(*source_page.embedded_offers.all())
+        embedded_offers = (
+            source_page.embedded_offers.all()
+            if not offers_to_discard
+            else source_page.embedded_offers.exclude(
+                id__in=offers_to_discard.values_list("id", flat=True)
+            )
+        )
+        target_page.embedded_offers.add(*embedded_offers)
         logger.debug(
             "%s Created %r",
             row_logging_prefix + "├─",
@@ -728,6 +793,7 @@ def duplicate_pages(
                 target_page,
                 row_logging_prefix,
                 keep_status,
+                offers_to_discard,
             )
 
 
