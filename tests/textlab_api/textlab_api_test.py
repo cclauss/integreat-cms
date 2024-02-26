@@ -358,7 +358,7 @@ def test_hix_response_400(
     # Setup a mocked Textlab API server with dummy responses
     httpserver.expect_request("/user/login").respond_with_json({"token": "dummy"})
     httpserver.expect_request("/benchmark/5").respond_with_json(
-        {"formulaHix": 15.48920568}, status=400
+        {"message": "Some error occured"}, status=400
     )
 
     # Redirect call aimed at the Textlab API to the fake server
@@ -398,3 +398,4 @@ def test_hix_response_400(
     page_translation = Page.objects.get(id=2).get_translation("de")
 
     assert page_translation.hix_score == None
+    assert False
