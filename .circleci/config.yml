@@ -309,6 +309,8 @@ jobs:
           path: test-results
       - store_artifacts:
           path: test-results
+      - store_artifacts:
+          path: integreat_cms/integreat-cms.log
       - persist_to_workspace:
           root: .
           paths:
