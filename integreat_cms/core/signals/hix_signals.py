@@ -29,7 +29,7 @@ def page_translation_save_handler(instance: PageTranslation, **kwargs: Any) -> N
         return
 
     if instance.hix_ignore or not instance.hix_enabled or not instance.content.strip():
-        logger.debug(
+        logger.info(
             "HIX calculation pre save signal skipped for %r (ignored=%s, enabled=%s, empty=%s)",
             instance,
             instance.hix_ignore,
@@ -46,7 +46,7 @@ def page_translation_save_handler(instance: PageTranslation, **kwargs: Any) -> N
         and latest_version.hix_score
         and latest_version.content == instance.content
     ):
-        logger.debug(
+        logger.info(
             "Content of %r was not changed, copying the HIX score from the previous version: %r",
             instance,
             latest_version.hix_score,
@@ -55,7 +55,7 @@ def page_translation_save_handler(instance: PageTranslation, **kwargs: Any) -> N
         return
 
     if score := lookup_hix_score(instance.content):
-        logger.debug("Storing hix score %s for %r", score, instance)
+        logger.info("Storing hix score %s for %r", score, instance)
         instance.hix_score = score
     else:
         logger.warning("Could not store the hix score for %r", instance)
