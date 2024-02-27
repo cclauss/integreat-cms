@@ -382,7 +382,7 @@ def test_hix_response_400(
 
     edit_page_data = {
         "title": "Willkommen in Augsburg",
-        "content": "Neuer Inhalt",
+        "content": "Neuer Inhalt 123",
         "mirrored_page_region": "",
         "_ref_node_id": 3,
         "_position": "right",
