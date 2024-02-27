@@ -279,17 +279,6 @@ jobs:
     resource_class: large
     parallelism: 16
     steps:
-      - run:
-          name: Creating Dummy Artifacts
-          command: |
-            echo "my artifact file" > /tmp/art-1;
-            mkdir /tmp/artifacts;
-            echo "my artifact files in a dir" > /tmp/artifacts/art-2;
-      - store_artifacts:
-          path: /tmp/art-1
-          destination: artifact-file
-      - store_artifacts:
-          path: /tmp/artifacts
       - checkout
       - attach_workspace:
           at: .
@@ -309,6 +298,8 @@ jobs:
           path: test-results
       - store_artifacts:
           path: test-results
+          destination: artifact-file2
+          when: on_fail
       - store_artifacts:
           path: integreat_cms/integreat-cms.log
       - persist_to_workspace:
@@ -316,6 +307,13 @@ jobs:
           paths:
             - cc-test-reporter
             - coverage
+      - run:
+          name: Upload CMS log
+          command: cp integreat_cms/integreat-cms.log integreat-cms.log
+          when: on_fail
+      - store_artifacts:
+          path: integreat-cms.log
+          destination: artifact-file1
   upload-test-coverage:
     docker:
       - image: cimg/base:stable
