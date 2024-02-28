@@ -462,6 +462,9 @@ class Region(AbstractBaseModel):
 
         :return: A QuerySet of all active language tree nodes of this region
         """
+        # Prevent ValueError for unsaved regions
+        if not self.pk:
+            return []
         try:
             # Try to get the prefetched language tree
             return self.prefetched_language_tree_nodes
