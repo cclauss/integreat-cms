@@ -30,8 +30,14 @@ TEXTLAB_API_KEY = "dummy"
 #: Enable manually because existing setting derives from the unset env var
 TEXTLAB_API_ENABLED = True
 #: Use debug logging on CircleCI
-DEBUG = True
 LOG_LEVEL = "DEBUG"
+LOGGING = {
+    "version": 1,
+    'disable_existing_loggers': False,
+    "root": {
+        "level": "DEBUG"
+    }
+}
 #: Disable linkcheck listeners on CircleCI
 LINKCHECK_DISABLE_LISTENERS = True
 #: Enable logging of all entries from the messages framework
