@@ -30,6 +30,7 @@ TEXTLAB_API_KEY = "dummy"
 #: Enable manually because existing setting derives from the unset env var
 TEXTLAB_API_ENABLED = True
 #: Use debug logging on CircleCI
+DEBUG = True
 LOG_LEVEL = "DEBUG"
 #: Disable linkcheck listeners on CircleCI
 LINKCHECK_DISABLE_LISTENERS = True
